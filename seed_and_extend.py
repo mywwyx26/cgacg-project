@@ -1,29 +1,5 @@
 import sys
-
-VALID = set('ACGT')
-COMP = str.maketrans('ACGTU', 'TGCAA')
-
-
-def prepare_inputs(max_ed, p, t):
-    p = p.strip().upper().replace('U', 'T')
-    t = t.strip().upper().replace('U', 'T')
-
-    if max_ed < 0:
-        raise ValueError(f'max edit distance ({max_ed}) must be nonnegative')
-    if len(p) == 0 or len(t) == 0:
-        raise ValueError('query (p) and reference (t) must be non-empty')
-    if max_ed >= len(p):
-        raise ValueError(f'max edit distance ({max_ed}) must be less than len(p) = {len(p)}')
-    if len(p) > len(t):
-        raise ValueError(f'query length ({len(p)}) must not exceed reference length ({len(t)})')
-    for name, s in (('query (p)', p), ('reference (t)', t)):
-        bad = set(s) - VALID
-        if bad:
-            raise ValueError(f'{name} contains invalid characters: {sorted(bad)}')
-
-    p = p.translate(COMP)[::-1] # reverse complement
-    return max_ed, p, t
-
+from read_inputs import read_files
 
 def seed_boundaries(n, parts):
     # split range(n) into contiguous pieces whose lengths differ by at most 1
@@ -35,7 +11,6 @@ def seed_boundaries(n, parts):
         start += length
     return bounds
 
-
 def build_index(t, k):
     index = {}
     for i in range(len(t) - k + 1):
@@ -45,7 +20,6 @@ def build_index(t, k):
         else:
             index[kmer].append(i)
     return index
-
 
 def best_match(p, window, max_ed):
     # semi-global alignment: all of p must align, but it may start/end anywhere in window
@@ -66,7 +40,6 @@ def best_match(p, window, max_ed):
     if dist > max_ed:
         return None
     return dist, prev.index(dist)
-
 
 def seed_and_extend(max_ed, p, t, indexes=None):
     # indexes: optional dict {k: k-mer index of t}, pass for every miRNA on the same UTR so each index is only made once
@@ -90,21 +63,22 @@ def seed_and_extend(max_ed, p, t, indexes=None):
                     hits[pos] = dist
     return dict(sorted(hits.items()))
 
-
 if __name__ == '__main__':
     if len(sys.argv) != 4:
-        sys.exit('usage: python seed_and_extend.py [max edit distance] [query (p)] [reference (t)]')
+        sys.exit('usage: python seed_and_extend.py [max edit distance] [miRNAs file] [sequence file]')
+
     try:
         max_ed = int(sys.argv[1])
     except ValueError:
         sys.exit(f'max edit distance must be an integer, got {sys.argv[1]!r}')
+    
     try:
-        max_ed, p, t = prepare_inputs(max_ed, sys.argv[2], sys.argv[3])
-    except ValueError as e:
+        max_ed, p, t = read_files(sys.argv[2], sys.argv[3], max_ed)
+    except (ValueError, OSError) as e:
         sys.exit(f'Error: {e}')
 
-    hits = seed_and_extend(max_ed, p, t)
-    if not hits:
-        print('no matches')
-    for end, dist in hits.items():
-        print(f'match ending at t[{end}] (exclusive), edit distance {dist}')
+    indexes = {}
+    for name, (site, mature) in p.items():
+        hits = seed_and_extend(max_ed, site, t, indexes)
+        for end, dist in hits.items():
+            print(f'{name}\tmatch ending at t[{end}] (exclusive)\tedit distance {dist}')
