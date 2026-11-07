@@ -37,6 +37,8 @@ def read_mirnas(mirna):
         next(file) # skip header line
         for line in file:
             line = line.split()
+            if line[2] != '9606': # human only
+                continue
             p[line[3]] = (line[1], line[4])
     return p
 
