@@ -1,4 +1,5 @@
 import sys
+import matplotlib.pyplot as plt
 from read_inputs import read_files
 
 def seed_boundaries(n, parts):
@@ -63,6 +64,30 @@ def seed_and_extend(max_ed, p, t, indexes=None):
                     hits[pos] = dist
     return dict(sorted(hits.items()))
 
+def make_plot(p, t, output, plot_output):
+    index = build_index(t, 6)
+    full, six = [], []   # 1-based offsets of 6-mer matches, split by whether the 7th also matches
+    with open(output, 'w') as file:
+        file.write('| miRNA | offset | 7th matches? |\n')
+        file.write('| --- | --- | --- |\n')
+        for name, (site, mature) in p.items():
+            for pos in index.get(site[:6], []):
+                seventh = pos + 6 < len(t) and t[pos + 6] == site[6]
+                file.write(f'| {name} | {pos + 1} | {str(seventh).lower()} |\n')
+                (full if seventh else six).append(pos + 1)
+ 
+    fig, ax = plt.subplots(figsize=(14, 2.5))
+    ax.hlines(0, 1, len(t), color='black', linewidth=2)
+    ax.scatter(six, [0] * len(six), marker='|', s=400, color='tab:blue', alpha=0.3, label='6-mer only')
+    ax.scatter(full, [0] * len(full), marker='|', s=400, color='tab:red', alpha=0.3, label='6-mer + 7th')
+    ax.set_xlim(1, len(t))
+    ax.set_ylim(-1, 1)
+    ax.set_yticks([])
+    ax.set_xlabel('position in 3\' UTR (nt)')
+    ax.legend(loc='upper right')
+    fig.tight_layout()
+    fig.savefig(plot_output, dpi=150)
+
 if __name__ == '__main__':
     if len(sys.argv) != 4:
         sys.exit('usage: python seed_and_extend.py [max edit distance] [miRNAs file] [sequence file]')
@@ -77,8 +102,14 @@ if __name__ == '__main__':
     except (ValueError, OSError) as e:
         sys.exit(f'Error: {e}')
 
+    make_plot(p, t, 'seed.md', 'plot.svg')
+
     indexes = {}
     for name, (site, mature) in p.items():
         hits = seed_and_extend(max_ed, site, t, indexes)
         for end, dist in hits.items():
             print(f'{name}\tmatch ending at t[{end}] (exclusive)\tedit distance {dist}')
+
+# do the seed part with 6 first, exact match into 3' UTR, the 3' UTR is in CDS
+# for each of the sequence of 6, check where it binds in the whole thing, make a graph and table, and check if 7th nucleotide
+# table of mirna, position in utr, if it includes first (of the 7) nucleotide, diagram 

@@ -45,6 +45,7 @@ def read_mirnas(mirna):
 def read_sequence(sequence):
     seq = []
     in_origin = False
+    start = 0 # index of where 3' UTR starts
     with open(sequence, 'r') as file:
         for line in file:
             if line.startswith('//'):
@@ -53,7 +54,9 @@ def read_sequence(sequence):
                 seq.append(re.sub(r'[^A-Za-z]', '', line))
             elif line.startswith('ORIGIN'):
                 in_origin = True
-    return ''.join(seq)
+            elif line.strip().startswith('CDS '):
+                start = int(line.split('..')[1])
+    return ''.join(seq)[start:]
 
 def read_files(mirna, sequence, max_ed):
     p = read_mirnas(mirna)
