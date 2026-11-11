@@ -142,7 +142,7 @@ if __name__ == '__main__':
     except (ValueError, OSError) as e:
         sys.exit(f'Error: {e}')
 
-    analyze_6mers(p, t, 'seed.md', 'plot.svg', 'histogram.svg', 'coverage.svg')
+    analyze_6mers(p, t, 'seed.md', 'plot.png', 'histogram.png', 'coverage.png')
 
     indexes = {}
     for name, (site, mature) in p.items():
