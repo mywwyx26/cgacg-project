@@ -64,29 +64,69 @@ def seed_and_extend(max_ed, p, t, indexes=None):
                     hits[pos] = dist
     return dict(sorted(hits.items()))
 
-def make_plot(p, t, output, plot_output):
+def analyze_6mers(p, t, output, plot_output, histogram_output, coverage_output):
+    # p: {name: (site, mature)}, site = reverse complement of Seed+m8
+    # first 6 of the seed (miRNA positions 2-7) pair with site[1:]
     index = build_index(t, 6)
-    full, six = [], []   # 1-based offsets of 6-mer matches, split by whether the 7th also matches
+    rows = []          # (miRNA, 1-based offset)
+    counts = {}        # miRNA -> number of matches
+    matched = set()    # sites (= families) with at least one match
+    coverage = [0] * len(t)   # position -> number of miRNAs whose 6-mer starts there
+    for name, (site, mature) in p.items():
+        positions = index.get(site[1:], [])
+        counts[name] = len(positions)
+        if positions:
+            matched.add(site)
+        for pos in positions:
+            rows.append((name, pos + 1))
+            coverage[pos] += 1
+    offsets = [offset for name, offset in rows]
+
     with open(output, 'w') as file:
-        file.write('| miRNA | offset | 7th matches? |\n')
-        file.write('| --- | --- | --- |\n')
-        for name, (site, mature) in p.items():
-            for pos in index.get(site[:6], []):
-                seventh = pos + 6 < len(t) and t[pos + 6] == site[6]
-                file.write(f'| {name} | {pos + 1} | {str(seventh).lower()} |\n')
-                (full if seventh else six).append(pos + 1)
- 
+        file.write(f'Human miRNAs: {len(p)}\n\n')
+        file.write(f'Human miRNA families: {len({site for site, mature in p.values()})}\n\n')
+        file.write(f'Human miRNA families with a 6-mer match in the 3\' UTR: {len(matched)}\n\n')
+        file.write('| miRNA | offset |\n')
+        file.write('| --- | --- |\n')
+        for name, offset in rows:
+            file.write(f'| {name} | {offset} |\n')
+
+    # matches along the 3' UTR
     fig, ax = plt.subplots(figsize=(14, 2.5))
     ax.hlines(0, 1, len(t), color='black', linewidth=2)
-    ax.scatter(six, [0] * len(six), marker='|', s=400, color='tab:blue', alpha=0.3, label='6-mer only')
-    ax.scatter(full, [0] * len(full), marker='|', s=400, color='tab:red', alpha=0.3, label='6-mer + 7th')
+    ax.scatter(offsets, [0] * len(offsets), marker='|', s=400, color='tab:blue', alpha=0.3)
     ax.set_xlim(1, len(t))
     ax.set_ylim(-1, 1)
     ax.set_yticks([])
     ax.set_xlabel('position in 3\' UTR (nt)')
-    ax.legend(loc='upper right')
     fig.tight_layout()
     fig.savefig(plot_output, dpi=150)
+    plt.close(fig)
+
+    # number of miRNAs with 0, 1, 2, ... matches
+    most = max(counts.values())
+    num_mirnas = [0] * (most + 1)
+    for c in counts.values():
+        num_mirnas[c] += 1
+    fig, ax = plt.subplots(figsize=(8, 5))
+    bars = ax.bar(range(most + 1), num_mirnas, color='tab:blue')
+    ax.bar_label(bars)
+    ax.set_xticks(range(most + 1))
+    ax.set_xlabel('number of matches in 3\' UTR')
+    ax.set_ylabel('number of miRNAs')
+    fig.tight_layout()
+    fig.savefig(histogram_output, dpi=150)
+    plt.close(fig)
+
+    # number of miRNAs matching at each position
+    fig, ax = plt.subplots(figsize=(14, 4))
+    ax.bar(range(1, len(t) + 1), coverage, width=1, color='tab:blue')
+    ax.set_xlim(1, len(t))
+    ax.set_xlabel('position in 3\' UTR (nt)')
+    ax.set_ylabel('number of miRNAs with a 6-mer match')
+    fig.tight_layout()
+    fig.savefig(coverage_output, dpi=150)
+    plt.close(fig)
 
 if __name__ == '__main__':
     if len(sys.argv) != 4:
@@ -102,7 +142,7 @@ if __name__ == '__main__':
     except (ValueError, OSError) as e:
         sys.exit(f'Error: {e}')
 
-    make_plot(p, t, 'seed.md', 'plot.svg')
+    analyze_6mers(p, t, 'seed.md', 'plot.svg', 'histogram.svg', 'coverage.svg')
 
     indexes = {}
     for name, (site, mature) in p.items():
@@ -110,6 +150,5 @@ if __name__ == '__main__':
         for end, dist in hits.items():
             print(f'{name}\tmatch ending at t[{end}] (exclusive)\tedit distance {dist}')
 
-# do the seed part with 6 first, exact match into 3' UTR, the 3' UTR is in CDS
-# for each of the sequence of 6, check where it binds in the whole thing, make a graph and table, and check if 7th nucleotide
-# table of mirna, position in utr, if it includes first (of the 7) nucleotide, diagram 
+    print(len(p), 'length p')
+    print(len(t), 'length t')
